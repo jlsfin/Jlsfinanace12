@@ -124,17 +124,17 @@ export default function LoanApplication({ user }) {
       try {
         // Try Firebase first
         firebaseCustomers = await customerService.getAllCustomers()
+        console.log('Firebase customers loaded:', firebaseCustomers)
       } catch (firebaseError) {
         console.warn('Firebase failed, using mock service:', firebaseError)
         // Fallback to mock service
         firebaseCustomers = await mockCustomerService.getAllCustomers()
+        console.log('Mock customers loaded:', firebaseCustomers)
       }
       
-      // Filter only KYC approved customers
-      const approvedCustomers = firebaseCustomers.filter(customer => 
-        customer.kycStatus?.toLowerCase() === 'approved'
-      )
-      setCustomers(approvedCustomers)
+      // Show all customers (no KYC filtering)
+      console.log('All customers:', firebaseCustomers)
+      setCustomers(firebaseCustomers)
     } catch (error) {
       console.error("Error loading customers:", error)
       // Fallback to mock data
@@ -144,7 +144,7 @@ export default function LoanApplication({ user }) {
           name: 'Rajesh Kumar',
           phone: '9876543210',
           email: 'rajesh@example.com',
-          kycStatus: 'Approved'
+          kycStatus: 'Pending'
         },
         {
           id: 2,
@@ -152,6 +152,13 @@ export default function LoanApplication({ user }) {
           phone: '9876543211',
           email: 'priya@example.com',
           kycStatus: 'Approved'
+        },
+        {
+          id: 3,
+          name: 'Amit Singh',
+          phone: '9876543212',
+          email: 'amit@example.com',
+          kycStatus: 'Pending'
         }
       ]
       setCustomers(mockCustomers)
@@ -307,19 +314,30 @@ export default function LoanApplication({ user }) {
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Customer Information</h3>
                 <div className="space-y-2">
-                  <Label htmlFor="customerId">Select Customer *</Label>
+                  <Label htmlFor="customerId">Select Customer * ({customers.length} customers available)</Label>
                   <Select value={applicationData.customerId} onValueChange={(value) => setApplicationData({...applicationData, customerId: value})}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a KYC approved customer" />
+                      <SelectValue placeholder={customers.length > 0 ? "Select a customer" : "No customers found"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {customers.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id.toString()}>
-                          {customer.name} - {customer.phone}
+                      {customers.length > 0 ? (
+                        customers.map((customer) => (
+                          <SelectItem key={customer.id} value={customer.id.toString()}>
+                            {customer.name} - {customer.phone}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-customers" disabled>
+                          No customers available
                         </SelectItem>
-                      ))}
+                      )}
                     </SelectContent>
                   </Select>
+                  {customers.length === 0 && (
+                    <p className="text-sm text-red-600">
+                      No customers found. Please add customers first.
+                    </p>
+                  )}
                 </div>
               </div>
 
