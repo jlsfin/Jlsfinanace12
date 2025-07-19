@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Search, Plus, Edit, Eye, Phone, Mail, MapPin, Loader2, Download } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { customerService } from '../firebase/customerService'
 import { loanService } from '../firebase/loanService'
 import { mockCustomerService } from '../firebase/mockService'
@@ -55,9 +56,11 @@ const mockCustomers = [
 ]
 
 export default function CustomerManagement({ user }) {
+  const navigate = useNavigate()
   const [customers, setCustomers] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [selectedCustomer, setSelectedCustomer] = useState(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
@@ -101,11 +104,11 @@ export default function CustomerManagement({ user }) {
   }
 
   const filteredCustomers = customers.filter(customer =>
-    customer.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (customer.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     customer.phoneNumber?.includes(searchTerm) ||
-    customer.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    customer.email?.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    (statusFilter === 'all' || customer.status === statusFilter)
   )
-
   const handleAddCustomer = async () => {
     try {
       setAddingCustomer(true)
@@ -130,7 +133,13 @@ export default function CustomerManagement({ user }) {
         panNumber: ''
       })
       setIsAddDialogOpen(false)
-      alert('Customer added successfully!')
+      
+      // Show success message briefly
+      alert('Customer added successfully! Redirecting to KYC registration...')
+      
+      // Redirect to KYC registration for the newly added customer
+      navigate(`/kyc-registration/${addedCustomer.id}`)
+      
     } catch (error) {
       console.error('Error adding customer:', error)
       alert('Failed to add customer. Please try again.')
@@ -154,6 +163,17 @@ export default function CustomerManagement({ user }) {
     return <Badge className="bg-red-100 text-red-800">Poor</Badge>
   }
 
+  const handleViewCustomer = (customer) => {
+    setSelectedCustomer(customer)
+    setIsViewDialogOpen(true)
+  }
+
+  const handleEditCustomer = (customer) => {
+    setSelectedCustomer(customer)
+    // In a real app, you'd open an edit dialog here
+    alert(`Editing customer: ${customer.fullName}`)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -162,11 +182,11 @@ export default function CustomerManagement({ user }) {
           <p className="text-gray-600">Manage customer information and accounts</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Button onClick={downloadCustomerList} variant="outline" className="w-full sm:w-auto">
+          <Button onClick={downloadCustomerListCSV} variant="outline" className="w-full sm:w-auto">
             <Download className="mr-2 h-4 w-4" />
             Download List
           </Button>
-          <Button onClick={() => setShowAddCustomer(true)} className="w-full sm:w-auto">
+          <Button onClick={() => setIsAddDialogOpen(true)} className="w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" />
             Add Customer
           </Button>
@@ -242,7 +262,7 @@ export default function CustomerManagement({ user }) {
                     </td>
                     <td className="py-4 px-2">
                       <Badge 
-                        variant={customer.status === 'active' ? 'default' : 
+                        variant={customer.status === 'active' ? 'default' :
                                 customer.status === 'inactive' ? 'secondary' : 'outline'}
                         className="capitalize"
                       >
@@ -278,7 +298,7 @@ export default function CustomerManagement({ user }) {
       </Card>
 
       {/* Add Customer Dialog */}
-      <Dialog open={showAddCustomer} onOpenChange={setShowAddCustomer}>
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="max-w-md mx-4 sm:mx-auto">
           <DialogHeader>
             <DialogTitle>Add New Customer</DialogTitle>
@@ -356,187 +376,94 @@ export default function CustomerManagement({ user }) {
           </DialogContent>
         </Dialog>
 
-      {/* Search and Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Search Customers</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex space-x-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search by name, phone, or email..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+      {/* View Customer Dialog */}
+      <Dialog open={isViewDialogOpen && selectedCustomer} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-2xl mx-4 sm:mx-auto">
+          <DialogHeader>
+            <DialogTitle>Customer Details</DialogTitle>
+            <DialogDescription>
+              Complete information for {selectedCustomer?.fullName}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedCustomer && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold text-lg mb-2">Personal Information</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Full Name:</span>
+                      <span className="font-medium">{selectedCustomer.fullName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Phone Number:</span>
+                      <span>{selectedCustomer.phoneNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Email:</span>
+                      <span>{selectedCustomer.email}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Address:</span>
+                      <span>{selectedCustomer.address}</span>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg mb-2">Identification</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Aadhar Number:</span>
+                      <span>{selectedCustomer.aadharNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">PAN Number:</span>
+                      <span>{selectedCustomer.panNumber}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold text-lg mb-2">Account Details</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Status:</span>
+                      {getStatusBadge(selectedCustomer.status)}
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Credit Score:</span>
+                      <div className="flex items-center gap-2">
+                        <span>{selectedCustomer.creditScore}</span>
+                        {getCreditScoreBadge(selectedCustomer.creditScore)}
+                      </div>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Member Since:</span>
+                      <span>{new Date(selectedCustomer.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg mb-2">Loan Information</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Total Loans:</span>
+                      <span>{selectedCustomer.totalLoans || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Active Loans:</span>
+                      <span>{selectedCustomer.activeLoans || 0}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Customer Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Customers ({filteredCustomers.length})</CardTitle>
-          <CardDescription>
-            Complete list of registered customers
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Credit Score</TableHead>
-                <TableHead>Loans</TableHead>
-                <TableHead>Join Date</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCustomers.map((customer) => (
-                <TableRow key={customer.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{customer.name}</div>
-                      <div className="text-sm text-gray-500">ID: {customer.id}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="flex items-center text-sm">
-                        <Phone className="mr-1 h-3 w-3" />
-                        {customer.phone}
-                      </div>
-                      <div className="flex items-center text-sm text-gray-500">
-                        <Mail className="mr-1 h-3 w-3" />
-                        {customer.email}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{getStatusBadge(customer.status)}</TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="font-medium">{customer.creditScore}</div>
-                      {getCreditScoreBadge(customer.creditScore)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      <div>Total: {customer.totalLoans}</div>
-                      <div className="text-gray-500">Active: {customer.activeLoans}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{new Date(customer.joinDate).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <Dialog open={isViewDialogOpen && selectedCustomer?.id === customer.id} onOpenChange={(open) => {
-                        setIsViewDialogOpen(open)
-                        if (!open) setSelectedCustomer(null)
-                      }}>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedCustomer(customer)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-2xl">
-                          <DialogHeader>
-                            <DialogTitle>Customer Details</DialogTitle>
-                            <DialogDescription>
-                              Complete information for {selectedCustomer?.name}
-                            </DialogDescription>
-                          </DialogHeader>
-                          {selectedCustomer && (
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-4">
-                                <div>
-                                  <Label className="text-sm font-medium">Personal Information</Label>
-                                  <div className="mt-2 space-y-2">
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-gray-500">Name:</span>
-                                      <span className="text-sm font-medium">{selectedCustomer.name}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-gray-500">Phone:</span>
-                                      <span className="text-sm">{selectedCustomer.phone}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-gray-500">Email:</span>
-                                      <span className="text-sm">{selectedCustomer.email}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div>
-                                  <Label className="text-sm font-medium">Documents</Label>
-                                  <div className="mt-2 space-y-2">
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-gray-500">Aadhar:</span>
-                                      <span className="text-sm">{selectedCustomer.aadhar}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-gray-500">PAN:</span>
-                                      <span className="text-sm">{selectedCustomer.pan}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="space-y-4">
-                                <div>
-                                  <Label className="text-sm font-medium">Address</Label>
-                                  <div className="mt-2">
-                                    <div className="flex items-start">
-                                      <MapPin className="mr-2 h-4 w-4 text-gray-400 mt-0.5" />
-                                      <span className="text-sm">{selectedCustomer.address}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div>
-                                  <Label className="text-sm font-medium">Account Status</Label>
-                                  <div className="mt-2 space-y-2">
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-gray-500">Status:</span>
-                                      {getStatusBadge(selectedCustomer.status)}
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-gray-500">Credit Score:</span>
-                                      <div className="flex items-center space-x-2">
-                                        <span className="text-sm font-medium">{selectedCustomer.creditScore}</span>
-                                        {getCreditScoreBadge(selectedCustomer.creditScore)}
-                                      </div>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-gray-500">Join Date:</span>
-                                      <span className="text-sm">{new Date(selectedCustomer.joinDate).toLocaleDateString()}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </DialogContent>
-                      </Dialog>
-                      <Button variant="outline" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
+
 

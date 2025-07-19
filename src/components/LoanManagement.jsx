@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -106,6 +106,20 @@ export default function LoanManagement({ user }) {
     loadData()
   }, [])
 
+  // Helper function to calculate EMI from loan data
+  const calculateEMIFromLoan = (loan) => {
+    const principal = parseFloat(loan.amount || loan.principalAmount || 0)
+    const rate = parseFloat(loan.interestRate || 0)
+    const tenure = parseInt(loan.tenure || loan.loanTenure || 12)
+    
+    if (!principal || !rate || !tenure) return 0
+    
+    const monthlyRate = rate / 100 / 12
+    const emi = (principal * monthlyRate * Math.pow(1 + monthlyRate, tenure)) / 
+                (Math.pow(1 + monthlyRate, tenure) - 1)
+    return Math.round(emi)
+  }
+
   const loadData = async () => {
     try {
       setLoading(true)
@@ -132,12 +146,16 @@ export default function LoanManagement({ user }) {
       }
       
       setLoans(firebaseLoans)
-      setCustomers(firebaseCustomers)
+      // Filter customers to only include those with KYC approved status
+      const kycApprovedCustomers = firebaseCustomers.filter(customer => customer.kycStatus === 'approved');
+      setCustomers(kycApprovedCustomers)
     } catch (error) {
       console.error('Error loading data:', error)
       // Fallback to mock data
       setLoans(mockLoans)
-      setCustomers(mockCustomers)
+      // Filter mock customers as well
+      const kycApprovedMockCustomers = mockCustomers.filter(customer => customer.kycStatus === 'approved');
+      setCustomers(kycApprovedMockCustomers)
     } finally {
       setLoading(false)
     }
@@ -145,10 +163,10 @@ export default function LoanManagement({ user }) {
 
   // Mock customer data for fallback
   const mockCustomers = [
-    { id: 1, fullName: 'Rajesh Kumar', phoneNumber: '9876543210' },
-    { id: 2, fullName: 'Priya Sharma', phoneNumber: '9876543211' },
-    { id: 3, fullName: 'Amit Singh', phoneNumber: '9876543212' },
-    { id: 4, fullName: 'Test Customer', phoneNumber: '9876543213' }
+    { id: 1, fullName: 'Rajesh Kumar', phoneNumber: '9876543210', kycStatus: 'approved' },
+    { id: 2, fullName: 'Priya Sharma', phoneNumber: '9876543211', kycStatus: 'approved' },
+    { id: 3, fullName: 'Amit Singh', phoneNumber: '9876543212', kycStatus: 'pending' },
+    { id: 4, fullName: 'Test Customer', phoneNumber: '9876543213', kycStatus: 'approved' }
   ]
 
   const filteredLoans = loans.filter(loan =>
@@ -335,6 +353,56 @@ export default function LoanManagement({ user }) {
   const generateReceipt = (loan, emiNumber) => {
     // Mock receipt generation
     alert(`Receipt generated for ${loan.customerName} - EMI #${emiNumber}`)
+  }
+
+  const generateLoanAgreement = async (loan) => {
+    try {
+      // Import the PDF generation utility
+      const { generateLoanAgreementPDF } = await import('../utils/pdfUtils')
+      
+      // Get customer and KYC details
+      let customerDetails = null
+      let kycDetails = null
+      
+      try {
+        customerDetails = customers.find(c => String(c.id) === String(loan.customerId))
+        // Try to get KYC details from service
+        const { kycService } = await import('../firebase/kycService')
+        kycDetails = await kycService.getKycDetailsByCustomerId(loan.customerId)
+      } catch (error) {
+        console.warn('Could not fetch customer/KYC details:', error)
+      }
+      
+      await generateLoanAgreementPDF(loan, customerDetails, kycDetails)
+    } catch (error) {
+      console.error('Error generating loan agreement:', error)
+      alert('Failed to generate loan agreement. Please try again.')
+    }
+  }
+
+  const generateLoanCard = async (loan) => {
+    try {
+      // Import the PDF generation utility
+      const { generateLoanCardPDF } = await import('../utils/pdfUtils')
+      
+      // Get customer and KYC details
+      let customerDetails = null
+      let kycDetails = null
+      
+      try {
+        customerDetails = customers.find(c => String(c.id) === String(loan.customerId))
+        // Try to get KYC details from service
+        const { kycService } = await import('../firebase/kycService')
+        kycDetails = await kycService.getKycDetailsByCustomerId(loan.customerId)
+      } catch (error) {
+        console.warn('Could not fetch customer/KYC details:', error)
+      }
+      
+      await generateLoanCardPDF(loan, customerDetails, kycDetails)
+    } catch (error) {
+      console.error('Error generating loan card:', error)
+      alert('Failed to generate loan card. Please try again.')
+    }
   }
 
   return (
@@ -734,17 +802,17 @@ export default function LoanManagement({ user }) {
                   </TableCell>
                   <TableCell>
                     <div>
-                      <div className="font-medium">{formatCurrency(loan.amount)}</div>
-                      <div className="text-sm text-gray-500">EMI: {formatCurrency(loan.monthlyEMI)}</div>
+                      <div className="font-medium">{formatCurrency(loan.amount || loan.principalAmount || 0)}</div>
+                      <div className="text-sm text-gray-500">EMI: {formatCurrency(loan.monthlyEMI || loan.emi || calculateEMIFromLoan(loan))}</div>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span>Paid: {formatCurrency(loan.totalPaid)}</span>
-                        <span>{loan.completedEMIs}/{loan.tenure}</span>
+                        <span>Paid: {formatCurrency(loan.totalPaid || 0)}</span>
+                        <span>{loan.completedEMIs || 0}/{loan.tenure || loan.loanTenure || 12}</span>
                       </div>
-                      <Progress value={(loan.completedEMIs / loan.tenure) * 100} className="h-2" />
+                      <Progress value={((loan.completedEMIs || 0) / (loan.tenure || loan.loanTenure || 12)) * 100} className="h-2" />
                     </div>
                   </TableCell>
                   <TableCell>{getStatusBadge(loan.status)}</TableCell>
@@ -752,226 +820,226 @@ export default function LoanManagement({ user }) {
                     {loan.nextDueDate ? (
                       <div className="text-sm">
                         <div>{new Date(loan.nextDueDate).toLocaleDateString()}</div>
-                        <div className="text-gray-500">{formatCurrency(loan.monthlyEMI)}</div>
+                        <div className="text-gray-500">{formatCurrency(loan.monthlyEMI || loan.emi || calculateEMIFromLoan(loan))}</div>
                       </div>
                     ) : (
                       <span className="text-gray-400">Completed</span>
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex space-x-2">
-                      <Dialog open={isViewDialogOpen && selectedLoan?.id === loan.id} onOpenChange={(open) => {
-                        setIsViewDialogOpen(open)
-                        if (!open) setSelectedLoan(null)
-                      }}>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedLoan(loan)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                          <DialogHeader>
-                            <DialogTitle>Loan Details - {selectedLoan?.id}</DialogTitle>
-                            <DialogDescription>
-                              Complete loan information and EMI schedule
-                            </DialogDescription>
-                          </DialogHeader>
-                          {selectedLoan && (
-                            <Tabs defaultValue="overview" className="w-full">
-                              <TabsList className="grid w-full grid-cols-3">
-                                <TabsTrigger value="overview">Overview</TabsTrigger>
-                                <TabsTrigger value="schedule">EMI Schedule</TabsTrigger>
-                                <TabsTrigger value="payments">Payments</TabsTrigger>
-                              </TabsList>
-                              
-                              <TabsContent value="overview" className="space-y-4">
-                                <div className="grid grid-cols-2 gap-6">
-                                  <div className="space-y-4">
-                                    <div>
-                                      <Label className="text-sm font-medium">Loan Information</Label>
-                                      <div className="mt-2 space-y-2">
-                                        <div className="flex justify-between">
-                                          <span className="text-sm text-gray-500">Loan ID:</span>
-                                          <span className="text-sm font-medium">{selectedLoan.id}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                          <span className="text-sm text-gray-500">Amount:</span>
-                                          <span className="text-sm font-medium">{formatCurrency(selectedLoan.amount)}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                          <span className="text-sm text-gray-500">Interest Rate:</span>
-                                          <span className="text-sm">{selectedLoan.interestRate}% p.a.</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                          <span className="text-sm text-gray-500">Tenure:</span>
-                                          <span className="text-sm">{selectedLoan.tenure} months</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                          <span className="text-sm text-gray-500">Monthly EMI:</span>
-                                          <span className="text-sm font-medium">{formatCurrency(selectedLoan.monthlyEMI)}</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="space-y-4">
-                                    <div>
-                                      <Label className="text-sm font-medium">Customer Information</Label>
-                                      <div className="mt-2 space-y-2">
-                                        <div className="flex justify-between">
-                                          <span className="text-sm text-gray-500">Name:</span>
-                                          <span className="text-sm font-medium">{selectedLoan.customerName}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                          <span className="text-sm text-gray-500">Phone:</span>
-                                          <span className="text-sm">{selectedLoan.customerPhone}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                          <span className="text-sm text-gray-500">Purpose:</span>
-                                          <span className="text-sm">{selectedLoan.purpose}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                          <span className="text-sm text-gray-500">Status:</span>
-                                          {getStatusBadge(selectedLoan.status)}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                                
-                                <div className="grid grid-cols-3 gap-4">
-                                  <Card>
-                                    <CardContent className="p-4">
-                                      <div className="flex items-center space-x-2">
-                                        <DollarSign className="h-5 w-5 text-green-600" />
-                                        <div>
-                                          <div className="text-sm text-gray-500">Total Paid</div>
-                                          <div className="font-medium">{formatCurrency(selectedLoan.totalPaid)}</div>
-                                        </div>
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-                                  <Card>
-                                    <CardContent className="p-4">
-                                      <div className="flex items-center space-x-2">
-                                        <CreditCard className="h-5 w-5 text-blue-600" />
-                                        <div>
-                                          <div className="text-sm text-gray-500">Remaining</div>
-                                          <div className="font-medium">{formatCurrency(selectedLoan.remainingAmount)}</div>
-                                        </div>
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-                                  <Card>
-                                    <CardContent className="p-4">
-                                      <div className="flex items-center space-x-2">
-                                        <Calendar className="h-5 w-5 text-purple-600" />
-                                        <div>
-                                          <div className="text-sm text-gray-500">EMIs Completed</div>
-                                          <div className="font-medium">{selectedLoan.completedEMIs}/{selectedLoan.tenure}</div>
-                                        </div>
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-                                </div>
-                              </TabsContent>
-                              
-                              <TabsContent value="schedule">
-                                <div className="space-y-4">
-                                  <div className="flex justify-between items-center">
-                                    <h3 className="text-lg font-medium">EMI Schedule</h3>
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline"
-                                      onClick={() => downloadEMIScheduleCSV(selectedLoan)}
-                                    >
-                                      <Download className="mr-2 h-4 w-4" />
-                                      Download Schedule
-                                    </Button>
-                                  </div>
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow>
-                                        <TableHead>EMI #</TableHead>
-                                        <TableHead>Due Date</TableHead>
-                                        <TableHead>EMI Amount</TableHead>
-                                        <TableHead>Principal</TableHead>
-                                        <TableHead>Interest</TableHead>
-                                        <TableHead>Balance</TableHead>
-                                        <TableHead>Status</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {generateEMISchedule(selectedLoan).map((emi) => (
-                                        <TableRow key={emi.installmentNo}>
-                                          <TableCell>{emi.installmentNo}</TableCell>
-                                          <TableCell>{emi.dueDate}</TableCell>
-                                          <TableCell>{formatCurrency(emi.emi)}</TableCell>
-                                          <TableCell>{formatCurrency(emi.principal)}</TableCell>
-                                          <TableCell>{formatCurrency(emi.interest)}</TableCell>
-                                          <TableCell>{formatCurrency(emi.balance)}</TableCell>
-                                          <TableCell>
-                                            {emi.installmentNo <= (selectedLoan.completedEMIs || 0) ? (
-                                              <Badge className="bg-green-100 text-green-800">Paid</Badge>
-                                            ) : (
-                                              <Badge variant="outline">Pending</Badge>
-                                            )}
-                                          </TableCell>
-                                        </TableRow>
-                                      ))}
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                              </TabsContent>
-                              
-                              <TabsContent value="payments">
-                                <div className="space-y-4">
-                                  <h3 className="text-lg font-medium">Payment History</h3>
-                                  <div className="space-y-2">
-                                    {generateEMISchedule(selectedLoan.amount, selectedLoan.interestRate, selectedLoan.tenure, selectedLoan.disbursedDate)
-                                      .filter(emi => emi.paid)
-                                      .map((emi) => (
-                                        <div key={emi.emiNumber} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                                          <div>
-                                            <div className="font-medium">EMI #{emi.emiNumber}</div>
-                                            <div className="text-sm text-gray-500">Paid on {new Date(emi.paidDate).toLocaleDateString()}</div>
-                                          </div>
-                                          <div className="flex items-center space-x-2">
-                                            <span className="font-medium">{formatCurrency(emi.amount)}</span>
-                                            <Button size="sm" variant="outline" onClick={() => generateReceipt(selectedLoan, emi.emiNumber)}>
-                                              <Download className="h-4 w-4" />
-                                            </Button>
-                                          </div>
-                                        </div>
-                                      ))}
-                                  </div>
-                                </div>
-                              </TabsContent>
-                            </Tabs>
-                          )}
-                        </DialogContent>
-                      </Dialog>
-                      {loan.status === 'active' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => sendWhatsAppReminder(loan)}
-                        >
-                          <Send className="h-4 w-4" />
-                        </Button>
-                      )}
+                    <div className="flex flex-col space-y-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => downloadLoanDetailsPDF(loan)}
-                        title="Download Loan Details"
+                        onClick={() => setSelectedLoan(loan)}
+                        className="w-full"
                       >
-                        <Download className="h-4 w-4" />
+                        View Details
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => generateLoanAgreement(loan)}
+                        className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700"
+                      >
+                        Agreement
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => generateLoanCard(loan)}
+                        className="w-full bg-green-50 hover:bg-green-100 text-green-700"
+                      >
+                        Loan Card
                       </Button>
                     </div>
+                    
+                    {/* View Details Dialog */}
+                    <Dialog open={isViewDialogOpen && selectedLoan?.id === loan.id} onOpenChange={(open) => {
+                      setIsViewDialogOpen(open)
+                      if (!open) setSelectedLoan(null)
+                    }}>
+                      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle>Loan Details - {selectedLoan?.id}</DialogTitle>
+                          <DialogDescription>
+                            Complete loan information and EMI schedule
+                          </DialogDescription>
+                        </DialogHeader>
+                        {selectedLoan && (
+                          <Tabs defaultValue="overview" className="w-full">
+                            <TabsList className="grid w-full grid-cols-3">
+                              <TabsTrigger value="overview">Overview</TabsTrigger>
+                              <TabsTrigger value="schedule">EMI Schedule</TabsTrigger>
+                              <TabsTrigger value="payments">Payments</TabsTrigger>
+                            </TabsList>
+                            
+                            <TabsContent value="overview" className="space-y-4">
+                              <div className="grid grid-cols-2 gap-6">
+                                <div className="space-y-4">
+                                  <div>
+                                    <Label className="text-sm font-medium">Loan Information</Label>
+                                    <div className="mt-2 space-y-2">
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Loan ID:</span>
+                                        <span className="text-sm font-medium">{selectedLoan.id}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Amount:</span>
+                                        <span className="text-sm font-medium">{formatCurrency(selectedLoan.amount || selectedLoan.principalAmount || 0)}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Interest Rate:</span>
+                                        <span className="text-sm">{selectedLoan.interestRate}% p.a.</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Tenure:</span>
+                                        <span className="text-sm">{selectedLoan.tenure || selectedLoan.loanTenure || 12} months</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Monthly EMI:</span>
+                                        <span className="text-sm font-medium">{formatCurrency(selectedLoan.monthlyEMI || selectedLoan.emi || calculateEMIFromLoan(selectedLoan))}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="space-y-4">
+                                  <div>
+                                    <Label className="text-sm font-medium">Customer Information</Label>
+                                    <div className="mt-2 space-y-2">
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Name:</span>
+                                        <span className="text-sm font-medium">{selectedLoan.customerName}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Phone:</span>
+                                        <span className="text-sm">{selectedLoan.customerPhone}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Purpose:</span>
+                                        <span className="text-sm">{selectedLoan.purpose}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Status:</span>
+                                        {getStatusBadge(selectedLoan.status)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="grid grid-cols-3 gap-4">
+                                <Card>
+                                  <CardContent className="p-4">
+                                    <div className="flex items-center space-x-2">
+                                      <DollarSign className="h-5 w-5 text-green-600" />
+                                      <div>
+                                        <div className="text-sm text-gray-500">Total Paid</div>
+                                        <div className="font-medium">{formatCurrency(selectedLoan.totalPaid)}</div>
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                                <Card>
+                                  <CardContent className="p-4">
+                                    <div className="flex items-center space-x-2">
+                                      <CreditCard className="h-5 w-5 text-blue-600" />
+                                      <div>
+                                        <div className="text-sm text-gray-500">Remaining</div>
+                                        <div className="font-medium">{formatCurrency(selectedLoan.remainingAmount || (selectedLoan.amount || selectedLoan.principalAmount || 0) - (selectedLoan.totalPaid || 0))}</div>
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                                <Card>
+                                  <CardContent className="p-4">
+                                    <div className="flex items-center space-x-2">
+                                      <Calendar className="h-5 w-5 text-purple-600" />
+                                      <div>
+                                        <div className="text-sm text-gray-500">EMIs Completed</div>
+                                        <div className="font-medium">{selectedLoan.completedEMIs || 0}/{selectedLoan.tenure || selectedLoan.loanTenure || 12}</div>
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              </div>
+                            </TabsContent>
+                            
+                            <TabsContent value="schedule">
+                              <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                  <h3 className="text-lg font-medium">EMI Schedule</h3>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => downloadEMIScheduleCSV(selectedLoan)}
+                                  >
+                                    <Download className="mr-2 h-4 w-4" />
+                                    Download Schedule
+                                  </Button>
+                                </div>
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>EMI #</TableHead>
+                                      <TableHead>Due Date</TableHead>
+                                      <TableHead>EMI Amount</TableHead>
+                                      <TableHead>Principal</TableHead>
+                                      <TableHead>Interest</TableHead>
+                                      <TableHead>Balance</TableHead>
+                                      <TableHead>Status</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {generateEMISchedule(selectedLoan).map((emi) => (
+                                      <TableRow key={emi.installmentNo}>
+                                        <TableCell>{emi.installmentNo}</TableCell>
+                                        <TableCell>{emi.dueDate}</TableCell>
+                                        <TableCell>{formatCurrency(emi.emi)}</TableCell>
+                                        <TableCell>{formatCurrency(emi.principal)}</TableCell>
+                                        <TableCell>{formatCurrency(emi.interest)}</TableCell>
+                                        <TableCell>{formatCurrency(emi.balance)}</TableCell>
+                                        <TableCell>
+                                          {emi.installmentNo <= (selectedLoan.completedEMIs || 0) ? (
+                                            <Badge className="bg-green-100 text-green-800">Paid</Badge>
+                                          ) : (
+                                            <Badge variant="outline">Pending</Badge>
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </TabsContent>
+                            
+                            <TabsContent value="payments">
+                              <div className="space-y-4">
+                                <h3 className="text-lg font-medium">Payment History</h3>
+                                <div className="space-y-2">
+                                  {generateEMISchedule(selectedLoan.amount, selectedLoan.interestRate, selectedLoan.tenure, selectedLoan.disbursedDate)
+                                    .filter(emi => emi.paid)
+                                    .map((emi) => (
+                                      <div key={emi.emiNumber} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                                        <div>
+                                          <div className="font-medium">EMI #{emi.emiNumber}</div>
+                                          <div className="text-sm text-gray-500">Paid on {new Date(emi.paidDate).toLocaleDateString()}</div>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                          <span className="font-medium">{formatCurrency(emi.amount)}</span>
+                                          <Button size="sm" variant="outline" onClick={() => generateReceipt(selectedLoan, emi.emiNumber)}>
+                                            <Download className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            </TabsContent>
+                          </Tabs>
+                        )}
+                      </DialogContent>
+                    </Dialog>
                   </TableCell>
                 </TableRow>
               ))}
@@ -982,4 +1050,5 @@ export default function LoanManagement({ user }) {
     </div>
   )
 }
+
 

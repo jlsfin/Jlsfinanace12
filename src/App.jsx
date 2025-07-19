@@ -4,8 +4,15 @@ import LoginPage from './components/LoginPage'
 import Dashboard from './components/Dashboard'
 import CustomerManagement from './components/CustomerManagement'
 import LoanManagement from './components/LoanManagement'
+import EMICollection from './components/EMICollection'
+import Receipts from './components/Receipts'
+import KYCRegistration from './components/KYCRegistration'
+import LoanApplication from './components/LoanApplication'
+import LoanApprovals from './components/LoanApprovals'
+import LoanDisbursal from './components/LoanDisbursal'
 import Reports from './components/Reports'
 import Settings from './components/Settings'
+import UserManagement from './components/UserManagement'
 import CustomerDashboard from './components/CustomerDashboard'
 import Layout from './components/Layout'
 import './App.css'
@@ -92,6 +99,86 @@ function App() {
                 } 
               />
               <Route 
+                path="/emi-collection" 
+                element={
+                  <Layout user={user} onLogout={logout}>
+                    <EMICollection user={user} />
+                  </Layout>
+                } 
+              />
+              <Route 
+                path="/receipts" 
+                element={
+                  <Layout user={user} onLogout={logout}>
+                    <Receipts user={user} />
+                  </Layout>
+                } 
+              />
+              <Route 
+                path="/kyc-registration" 
+                element={
+                  <Layout user={user} onLogout={logout}>
+                    <KYCRegistration user={user} />
+                  </Layout>
+                } 
+              />
+              <Route 
+                path="/kyc-registration/:customerId" 
+                element={
+                  <Layout user={user} onLogout={logout}>
+                    <KYCRegistration user={user} />
+                  </Layout>
+                } 
+              />
+              <Route 
+                path="/loan-application" 
+                element={
+                  <Layout user={user} onLogout={logout}>
+                    <LoanApplication user={user} />
+                  </Layout>
+                } 
+              />
+              <Route 
+                path="/loan-application/:customerId" 
+                element={
+                  <Layout user={user} onLogout={logout}>
+                    <LoanApplication user={user} />
+                  </Layout>
+                } 
+              />
+              <Route 
+                path="/loan-approvals" 
+                element={
+                  <Layout user={user} onLogout={logout}>
+                    <LoanApprovals user={user} />
+                  </Layout>
+                } 
+              />
+              <Route 
+                path="/loan-approvals/:applicationId" 
+                element={
+                  <Layout user={user} onLogout={logout}>
+                    <LoanApprovals user={user} />
+                  </Layout>
+                } 
+              />
+              <Route 
+                path="/loan-disbursal" 
+                element={
+                  <Layout user={user} onLogout={logout}>
+                    <LoanDisbursal user={user} />
+                  </Layout>
+                } 
+              />
+              <Route 
+                path="/loan-disbursal/:applicationId" 
+                element={
+                  <Layout user={user} onLogout={logout}>
+                    <LoanDisbursal user={user} />
+                  </Layout>
+                } 
+              />
+              <Route 
                 path="/reports" 
                 element={
                   <Layout user={user} onLogout={logout}>
@@ -104,6 +191,14 @@ function App() {
                 element={
                   <Layout user={user} onLogout={logout}>
                     <Settings user={user} />
+                  </Layout>
+                } 
+              />
+              <Route 
+                path="/user-management" 
+                element={
+                  <Layout user={user} onLogout={logout}>
+                    <UserManagement user={user} />
                   </Layout>
                 } 
               />
@@ -123,4 +218,5 @@ function App() {
 }
 
 export default App
+
 
